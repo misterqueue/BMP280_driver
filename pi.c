@@ -8,13 +8,12 @@
 
 #include "bmp280.h"
 #include "pi.h"
+#include "infos.h"
 
 struct bmp280_t bmp280;
 
 #define I2C_BUFFER_LEN 25
-#define BUFFER_LENGTH 0xFF
-#define BMP280_DATA_INDEX 1
-#define BMP280_ADDRESS_INDEX 2
+
 
 /*	Brief : The delay routine
  *	\param : delay in ms
@@ -33,8 +32,7 @@ void BMP280_delay_msek(u32 msek)
  */
 s8 BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-    int fd = getBMP280Handle();
-    //printf("Reading device=0x%02x register=0x%02x count=%d\n", dev_addr, reg_addr, cnt);
+    int fd = getWiringPiI2CHandle();
 
     s32 iError = BMP280_INIT_VALUE;
     u8 array[I2C_BUFFER_LEN] = {BMP280_INIT_VALUE};
@@ -45,16 +43,12 @@ s8 BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
     for (offset = 0; offset < cnt; offset++)
     {
         array[BMP280_INIT_VALUE + offset] = wiringPiI2CReadReg8(fd, reg_addr + offset);
-        BMP280_delay_msek(1);
     }
 
-    //printf("Result: ");
     for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++)
     {
-        //printf("%02x ", array[stringpos]);
         *(reg_data + stringpos) = array[stringpos];
     }
-    //printf("\n\n");
     iError = SUCCESS;
     return (s8)iError;
 }
@@ -69,8 +63,7 @@ s8 BMP280_I2C_bus_read(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
  */
 s8 BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
 {
-    int fd = getBMP280Handle();
-    //printf("Writing device=0x%02x register=0x%02x value=0x%02x count=%d\n", dev_addr, reg_addr, *reg_data, cnt);
+    int fd = getWiringPiI2CHandle();
 
     s32 iError = BMP280_INIT_VALUE;
     u8 array[I2C_BUFFER_LEN];
@@ -78,10 +71,14 @@ s8 BMP280_I2C_bus_write(u8 dev_addr, u8 reg_addr, u8 *reg_data, u8 cnt)
     array[BMP280_INIT_VALUE] = reg_addr;
     for (stringpos = BMP280_INIT_VALUE; stringpos < cnt; stringpos++)
     {
-        array[stringpos + BMP280_DATA_INDEX] = *(reg_data + stringpos);
+        array[stringpos] = *(reg_data + stringpos);
     }
 
-    wiringPiI2CWriteReg8(fd, reg_addr, array[BMP280_INIT_VALUE + BMP280_DATA_INDEX]);
+    u8 offset = BMP280_INIT_VALUE;
+    for (offset = 0; offset < cnt; offset++)
+    {
+        wiringPiI2CWriteReg8(fd, reg_addr + offset, array[BMP280_INIT_VALUE + offset]);
+    }
 
     return (s8)iError;
 }
@@ -112,7 +109,7 @@ void initWiringPi()
     }
 }
 
-int getBMP280Handle()
+int getWiringPiI2CHandle()
 {
     static int fd = 0;
 
@@ -127,161 +124,15 @@ int getBMP280Handle()
     return fd;
 }
 
-struct bmp280_infos getBMP280Infos()
+
+int getBMP280TemperatureAtmosphericPressure(int *temperature, int *pressure, int debug)
 {
-    struct bmp280_infos infos;
-    infos.i2c_address = BMP280_I2C_ADDRESS;
-
-    int fd = getBMP280Handle();
-    infos.chip_id = wiringPiI2CReadReg8(fd, BMP280_CHIP_ID_REG);
-
-    infos.status = wiringPiI2CReadReg8(fd, BMP280_STAT_REG);
-    infos.measuring = BMP280_GET_BITSLICE(infos.status, BMP280_STATUS_REG_MEASURING);
-    infos.im_update = BMP280_GET_BITSLICE(infos.status, BMP280_STATUS_REG_IM_UPDATE);
-
-    infos.ctrl_meas = wiringPiI2CReadReg8(fd, BMP280_CTRL_MEAS_REG);
-    infos.power_mode = BMP280_GET_BITSLICE(infos.ctrl_meas, BMP280_CTRL_MEAS_REG_POWER_MODE);
-    infos.osrs_t = BMP280_GET_BITSLICE(infos.ctrl_meas, BMP280_CTRL_MEAS_REG_OVERSAMP_TEMPERATURE);
-    infos.osrs_p = BMP280_GET_BITSLICE(infos.ctrl_meas, BMP280_CTRL_MEAS_REG_OVERSAMP_PRESSURE);
-
-    infos.config = wiringPiI2CReadReg8(fd, BMP280_CONFIG_REG);
-    infos.t_sb = BMP280_GET_BITSLICE(infos.config, BMP280_CONFIG_REG_STANDBY_DURN);
-    infos.filter = BMP280_GET_BITSLICE(infos.config, BMP280_CONFIG_REG_FILTER);
-
-    return infos;
-}
-
-void displayOversampling(u8 value)
-{
-    if (value == BMP280_OVERSAMP_SKIPPED)
-    {
-        printf("= Skipped\n");
-    }
-    else if (value == BMP280_OVERSAMP_1X)
-    {
-        printf("= 1x\n");
-    }
-    else if (value == BMP280_OVERSAMP_2X)
-    {
-        printf("= 2x\n");
-    }
-    else if (value == BMP280_OVERSAMP_4X)
-    {
-        printf("= 4x\n");
-    }
-    else if (value == BMP280_OVERSAMP_8X)
-    {
-        printf("= 8x\n");
-    }
-    else if (value >= BMP280_OVERSAMP_16X)
-    {
-        printf("= 16x\n");
-    }
-}
-
-void displayFilter(u8 value)
-{
-    if (value == BMP280_FILTER_COEFF_OFF)
-    {
-        printf("= Off\n");
-    }
-    else if (value == BMP280_FILTER_COEFF_2)
-    {
-        printf("= coefficient 2\n");
-    }
-    else if (value == BMP280_FILTER_COEFF_4)
-    {
-        printf("= coefficient 4\n");
-    }
-    else if (value == BMP280_FILTER_COEFF_8)
-    {
-        printf("= coefficient 8\n");
-    }
-    else if (value == BMP280_FILTER_COEFF_16)
-    {
-        printf("= coefficient 16\n");
-    }
-}
-
-void displayStandByTime(u8 value)
-{
-    if (value == BMP280_STANDBY_TIME_1_MS)
-    {
-        printf("= 0.5ms\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_63_MS)
-    {
-        printf("= 62.5ms\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_125_MS)
-    {
-        printf("= 125ms\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_250_MS)
-    {
-        printf("= 250ms\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_500_MS)
-    {
-        printf("= 500ms\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_1000_MS)
-    {
-        printf("= 1s\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_2000_MS)
-    {
-        printf("= 2s\n");
-    }
-    else if (value == BMP280_STANDBY_TIME_4000_MS)
-    {
-        printf("= 4s\n");
-    }
-}
-
-void displayBMP280Infos(struct bmp280_infos infos)
-{
-    printf("I2C address: 0x%02x\n", infos.i2c_address);
-    printf("Chip ID: 0x%02x\n", infos.chip_id);
-
-    printf("Status register: 0x%02x\n", infos.status);
-    printf("  Measuring: %s\n", infos.measuring ? "Yes" : "No");
-    printf("  Updating Image Registers: %s (data is being copied from NVM to image registers)\n", infos.im_update ? "Yes" : "No");
-
-    printf("Ctrl meas register: 0x%02x\n", infos.ctrl_meas);
-    printf("  Power mode: 0x%02x ", infos.power_mode);
-    if (infos.power_mode == 0)
-    {
-        printf("= Sleep mode\n");
-    }
-    else if (infos.power_mode == 3)
-    {
-        printf("= Normal mode\n");
-    }
-    else
-    {
-        printf("= Forced mode\n");
-    }
-    printf("  Temperature oversampling: 0x%02x ", infos.osrs_t);
-    displayOversampling(infos.osrs_t);
-    printf("  Pressure oversampling: 0x%02x ", infos.osrs_p);
-    displayOversampling(infos.osrs_p);
-
-    printf("Config register: 0x%02x\n", infos.config);
-    printf("  Inactive duration (in standby mode): 0x%02x ", infos.t_sb);
-    displayStandByTime(infos.t_sb);
-    printf("  Filter: 0x%02x ", infos.filter);
-    displayFilter(infos.filter);
-}
-
-void initBMP280()
-{
-    int fd = getBMP280Handle();
+    int fd = getWiringPiI2CHandle();
 
     int chip_id = wiringPiI2CReadReg8(fd, BMP280_CHIP_ID_REG);
     if (BMP280_CHIP_ID != chip_id)
     {
-        fprintf(stderr, "Unsupported chip: expected id=%d, found id=%d\n", BMP280_CHIP_ID, chip_id);
+        fprintf(stderr, "Unsupported chip: expected id=0x%02x, found id=0x%02x\n", BMP280_CHIP_ID, chip_id);
         exit(EXIT_FAILURE);
     }
 
@@ -305,5 +156,9 @@ void initBMP280()
 
     com_rslt += bmp280_set_power_mode(BMP280_SLEEP_MODE);
 
-    printf("Temperature=%d Pressure=%d\n", v_actual_temp_s32, v_actual_press_u32);
+    if (debug) printf("BMP280: Temperature=%5.2fC Pressure=%5.2f hPa\n", (v_actual_temp_s32 / 100.0), (v_actual_press_u32 / 100.0));
+
+    *pressure = (int)v_actual_press_u32;
+    *temperature = (int)v_actual_temp_s32;
+    return com_rslt;
 }

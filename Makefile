@@ -1,8 +1,8 @@
 CC=gcc
 CFLAGS=-c -O2 -Wall -Wextra -fstack-protector-all -Wstack-protector --param ssp-buffer-size=4 -pie -fPIE -ftrapv -D_FORTIFY_SOURCE=2 -Wl,-z,relro,-z,now
 LDFLAGS=-l wiringPi -lm
-SOURCES_MAIN=get.c pi.c bmp280.c
-HEADERS_MAIN=bmp280.h pi.h
+SOURCES_MAIN=get.c pi.c infos.c bmp280.c
+HEADERS_MAIN=bmp280.h pi.h infos.h
 OBJECTS_MAIN=$(SOURCES_MAIN:.c=.o)
 EXECUTABLE_MAIN=get
 
